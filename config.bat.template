@@ -1,0 +1,35 @@
+@echo off
+:: ============================================================
+:: novel-tts 配置模板
+:: 取消注释下方行即可自定义配置
+:: ============================================================
+
+:: 服务监听地址（默认 0.0.0.0 表示监听所有网卡）
+:: set NOVEL_TTS_HOST=0.0.0.0
+
+:: 服务端口（默认 8008）
+:: set NOVEL_TTS_PORT=8008
+
+:: API 密钥（默认 dev-local-key，生产环境请修改）
+:: set NOVEL_TTS_API_KEY=dev-local-key
+
+:: 音频输出目录
+:: set NOVEL_TTS_OUTPUT_DIR=./data/audio
+
+:: 临时文件目录
+:: set NOVEL_TTS_TEMP_DIR=./data/temp
+
+:: 数据库文件路径
+:: set NOVEL_TTS_DB_URL=sqlite:///./novel_tts.db
+
+:: 最大并发任务数（默认 1）
+:: set NOVEL_TTS_MAX_CONCURRENT_JOBS=1
+
+:: 请求体最大字符数（默认 10000）
+:: set NOVEL_TTS_REQUEST_BODY_MAX_CHARS=10000
+
+:: 是否使用假 TTS 引擎（用于测试，默认 false）
+:: set NOVEL_TTS_USE_FAKE_ENGINE=false
+
+:: 是否启用 Flash Attention 2（需先安装 flash-attn，默认 false）
+:: set NOVEL_TTS_USE_FLASH_ATTENTION2=false

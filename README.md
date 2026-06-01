@@ -9,13 +9,14 @@ Async chapter-level Text-to-Speech (TTS) service for novels, backed by **Qwen3-T
 1. [Project Overview](#1-project-overview)
 2. [Environment Requirements](#2-environment-requirements)
 3. [Quick Start](#3-quick-start)
-4. [Configuration via Environment Variables](#4-configuration-via-environment-variables)
-5. [API Usage](#5-api-usage)
-6. [Job Lifecycle](#6-job-lifecycle)
-7. [Model Switch: 0.6B → 1.7B](#7-model-switch-06b--17b)
-8. [Running Tests](#8-running-tests)
-9. [Troubleshooting](#9-troubleshooting)
-10. [Windows Deployment (NSSM / Task Scheduler)](#10-windows-deployment-nssm--task-scheduler)
+4. [Windows 一键启动器](#4-windows-一键启动器)
+5. [Configuration via Environment Variables](#5-configuration-via-environment-variables)
+6. [API Usage](#6-api-usage)
+7. [Job Lifecycle](#7-job-lifecycle)
+8. [Model Switch: 0.6B → 1.7B](#8-model-switch-06b--17b)
+9. [Running Tests](#9-running-tests)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Windows Deployment (NSSM / Task Scheduler)](#11-windows-deployment-nssm--task-scheduler)
 
 ---
 
@@ -82,7 +83,69 @@ The service starts on `http://0.0.0.0:8008` by default. SQLite database and audi
 
 ---
 
-## 4. Configuration via Environment Variables
+## 4. Windows 一键启动器
+
+项目根目录提供了 **开箱即用的 Windows 批处理脚本**，无需手动输入命令即可启动/停止服务。
+
+### 4.1 文件清单
+
+| 文件 | 用途 |
+|---|---|
+| `start.bat` | 控制台启动脚本，带环境检测、依赖检查和自动目录创建 |
+| `stop.bat` | 停止脚本，自动查找并终止服务进程 |
+| `start_hidden.vbs` | 隐藏窗口启动器，后台静默运行，日志写入 `novel-tts.log` |
+| `config.bat.template` | 配置模板，复制为 `config.bat` 后可自定义所有环境变量 |
+
+### 4.2 快速使用
+
+**首次使用（推荐）：**
+
+1. 复制配置模板：
+   ```batch
+   copy config.bat.template config.bat
+   ```
+2. 按需编辑 `config.bat`，取消注释需要修改的行：
+   ```batch
+   set NOVEL_TTS_PORT=8008
+   set NOVEL_TTS_API_KEY=my-secret-key
+   set NOVEL_TTS_OUTPUT_DIR=D:\novel-tts\audio
+   ```
+3. 双击 `start.bat` 启动服务。
+
+**日常启动：**
+
+- **开发调试** → 双击 `start.bat`（保留控制台窗口，实时查看日志）
+- **后台挂机** → 双击 `start_hidden.vbs`（无窗口，日志写入 `novel-tts.log`）
+- **停止服务** → 双击 `stop.bat`，或在 `start.bat` 窗口按 `Ctrl+C`
+
+### 4.3 功能说明
+
+**`start.bat` 启动流程**
+
+```
+[1/5] 检测 Python 环境（3.11+）
+[2/5] 检测 uvicorn，缺失则自动 pip install -r requirements.txt
+[3/5] 自动创建 data/audio 和 data/temp 目录
+[4/5] 加载 config.bat（如果存在）
+[5/5] 启动 uvicorn 服务
+```
+
+**`stop.bat` 停止逻辑**
+
+- 优先查找监听 `:8008` 端口的进程
+- 其次按窗口标题匹配 `novel-tts 一键启动器`
+- 自动执行 `taskkill /F /PID <pid>`
+
+**`start_hidden.vbs` 隐藏模式**
+
+- 通过 VBScript 的 `WshShell.Run` 以隐藏窗口（参数 `0`）启动
+- 启动后等待 2 秒，自动探测端口是否监听
+- 弹出对话框提示启动成功/失败
+- 所有 stdout/stderr 重定向到 `novel-tts.log`
+
+---
+
+## 5. Configuration via Environment Variables
 
 All settings are read from environment variables with the prefix `NOVEL_TTS_`. No config file is required.
 
@@ -108,7 +171,7 @@ NOVEL_TTS_DB_URL=sqlite:///D:/novel-tts/novel_tts.db
 
 ---
 
-## 5. API Usage
+## 6. API Usage
 
 All endpoints except `/healthz` require the header `X-Api-Key: <your key>`.
 
@@ -226,7 +289,7 @@ No authentication required. Use this endpoint for load-balancer or NSSM health p
 
 ---
 
-## 6. Job Lifecycle
+## 7. Job Lifecycle
 
 ```
          POST /v1/tts/jobs
@@ -258,7 +321,7 @@ Jobs remain in the database indefinitely. Re-submitting an identical request ret
 
 ---
 
-## 7. Model Switch: 0.6B → 1.7B
+## 8. Model Switch: 0.6B → 1.7B
 
 The 1.7B model produces higher-quality audio but requires more VRAM (~14 GB vs ~6 GB).
 
@@ -284,7 +347,7 @@ NOVEL_TTS_AVAILABLE_MODELS=["qwen3_tts_0_6b_customvoice","qwen3_tts_1_7b_customv
 
 ---
 
-## 8. Running Tests
+## 9. Running Tests
 
 ```bash
 # All tests (unit + integration with fake engine)
@@ -303,7 +366,7 @@ Expected output: **12 passed**.
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 ### Queue backlog — jobs stuck in `queued`
 
@@ -372,7 +435,7 @@ This TensorFlow info log is harmless for this service and can be ignored.
 
 ---
 
-## 10. Windows Deployment (NSSM / Task Scheduler)
+## 11. Windows Deployment (NSSM / Task Scheduler)
 
 ### Option A — NSSM (recommended for always-on service)
 

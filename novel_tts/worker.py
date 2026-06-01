@@ -1,10 +1,12 @@
 # novel_tts/worker.py
 import asyncio
 import hashlib
+import json
 from pathlib import Path
 import soundfile as sf
 from novel_tts.segmentation import split_chapter_text
 from novel_tts.audio import merge_segments
+from novel_tts.tts_engine import QwenTTSEngine
 
 
 class WorkerService:
@@ -30,6 +32,16 @@ class WorkerService:
         key = f"{model_id}|{voice_profile}|{text}"
         return hashlib.sha256(key.encode()).hexdigest()[:16]
 
+    def _resolve_instruct(self, params: dict) -> str | None:
+        """Pick user-provided instruct or build one from speed/pitch/volume."""
+        instruct = params.get("instruct")
+        if instruct:
+            return instruct
+        speed = params.get("speed")
+        pitch = params.get("pitch")
+        volume = params.get("volume")
+        return QwenTTSEngine._build_instruct(speed, pitch, volume)
+
     async def process_job(self, job_id: str):
         job = self.repo.get(job_id)
         self.repo.mark_processing(job_id)
@@ -51,6 +63,9 @@ class WorkerService:
             cache_dir.mkdir(parents=True, exist_ok=True)
             actual_sr = getattr(self.tts_engine, "_model_sample_rate", self.sample_rate)
 
+            params = json.loads(job.params_json) if job.params_json else {}
+            instruct = self._resolve_instruct(params)
+
             for idx, text in enumerate(parts):
                 seg_hash = self._segment_hash(text, job.voice_profile, job.model_id)
                 cache_path = cache_dir / f"{seg_hash}.wav"
@@ -67,7 +82,7 @@ class WorkerService:
                 # Run GPU inference in a background thread so the asyncio event loop
                 # stays free for HTTP traffic while long synthesis is in progress.
                 wav = await asyncio.to_thread(
-                    self.tts_engine.synthesize, text, voice_profile=job.voice_profile
+                    self.tts_engine.synthesize, text, voice_profile=job.voice_profile, instruct=instruct
                 )
                 actual_sr = getattr(self.tts_engine, "_model_sample_rate", self.sample_rate)
                 await asyncio.to_thread(sf.write, str(cache_path), wav, actual_sr)

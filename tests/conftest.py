@@ -48,6 +48,7 @@ def test_client(tmp_path):
 
     api_module.app.state.repo = repo
     api_module.app.state.worker = worker
+    api_module.app.state.tts_engine = tts_engine
 
     client = TestClient(api_module.app)
     yield client

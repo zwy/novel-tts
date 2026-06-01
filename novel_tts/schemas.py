@@ -11,10 +11,11 @@ class CreateJobRequest(BaseModel):
     model_id: str | None = None
     audio_format: str = "wav"
     sample_rate: int = 24000
-    speed: float | None = None
-    pitch: float | None = None
-    volume: float | None = None
+    speed: float | None = Field(default=None, ge=0.1, le=3.0)
+    pitch: float | None = Field(default=None, ge=0.1, le=3.0)
+    volume: float | None = Field(default=None, ge=0.1, le=3.0)
     pause_ms: int | None = 160
+    instruct: str | None = Field(default=None, description="Natural-language style/emotion instruction, e.g. '用温柔悲伤的语气朗读'.")
 
 
 class JobResponse(BaseModel):

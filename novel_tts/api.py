@@ -10,6 +10,7 @@ from novel_tts.db import create_session_factory
 from novel_tts.repository import JobRepository
 from novel_tts.worker import WorkerService
 from novel_tts.tts_engine import FakeTTSEngine, QwenTTSEngine
+from novel_tts.schemas import CreateJobRequest
 
 app = FastAPI(title="novel-tts")
 settings = Settings()
@@ -24,7 +25,11 @@ if settings.use_fake_engine:
     _tts_engine = FakeTTSEngine(sample_rate=24000)
 else:
     _hf_repo = settings.model_registry[settings.default_model_id].hf_repo
-    _tts_engine = QwenTTSEngine(model_id=_hf_repo, sample_rate=24000)
+    _tts_engine = QwenTTSEngine(
+        model_id=_hf_repo,
+        sample_rate=24000,
+        use_flash_attention2=settings.use_flash_attention2,
+    )
 _worker = WorkerService(
     repo=_repo,
     tts_engine=_tts_engine,
@@ -34,6 +39,7 @@ _worker = WorkerService(
 )
 app.state.repo = _repo
 app.state.worker = _worker
+app.state.tts_engine = _tts_engine
 app.state.worker_task = None
 
 
@@ -62,26 +68,26 @@ def check_api_key(x_api_key: str | None):
 
 
 @app.post("/v1/tts/jobs")
-async def create_job(request: Request, body: dict, x_api_key: str | None = Header(default=None)):
+async def create_job(request: Request, body: CreateJobRequest, x_api_key: str | None = Header(default=None)):
     check_api_key(x_api_key)
     repo = request.app.state.repo
     worker = request.app.state.worker
-    if len(body.get("text", "")) > settings.request_body_max_chars:
+    if len(body.text) > settings.request_body_max_chars:
         raise HTTPException(status_code=400, detail="text too long")
-    model_id = body.get("model_id") or settings.default_model_id
+    model_id = body.model_id or settings.default_model_id
     if model_id not in settings.available_models:
         raise HTTPException(status_code=400, detail="unknown model_id")
     text_hash = hashlib.sha256(
-        f"{body['text']}|{body.get('voice_profile')}|{model_id}".encode()
+        f"{body.text}|{body.voice_profile}|{model_id}".encode()
     ).hexdigest()
     payload = {
-        "request_id": body["request_id"],
-        "book_id": body["book_id"],
-        "chapter_id": body["chapter_id"],
-        "text": body["text"],
-        "voice_profile": body["voice_profile"],
+        "request_id": body.request_id,
+        "book_id": body.book_id,
+        "chapter_id": body.chapter_id,
+        "text": body.text,
+        "voice_profile": body.voice_profile,
         "model_id": model_id,
-        "params_json": json.dumps(body, ensure_ascii=False),
+        "params_json": json.dumps(body.model_dump(mode="json"), ensure_ascii=False),
         "text_hash": text_hash,
     }
     job = repo.create_or_get(payload)
@@ -137,3 +143,29 @@ async def healthz():
 async def list_models(x_api_key: str | None = Header(default=None)):
     check_api_key(x_api_key)
     return {"default_model_id": settings.default_model_id, "models": settings.available_models}
+
+
+@app.get("/v1/models/{model_id}/speakers")
+async def get_model_speakers(request: Request, model_id: str, x_api_key: str | None = Header(default=None)):
+    check_api_key(x_api_key)
+    if model_id not in settings.model_registry:
+        raise HTTPException(status_code=400, detail="unknown model_id")
+    engine = request.app.state.tts_engine
+    try:
+        speakers = await asyncio.to_thread(engine.get_supported_speakers)
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"failed to load speakers: {ex}")
+    return {"model_id": model_id, "speakers": speakers}
+
+
+@app.get("/v1/models/{model_id}/languages")
+async def get_model_languages(request: Request, model_id: str, x_api_key: str | None = Header(default=None)):
+    check_api_key(x_api_key)
+    if model_id not in settings.model_registry:
+        raise HTTPException(status_code=400, detail="unknown model_id")
+    engine = request.app.state.tts_engine
+    try:
+        languages = await asyncio.to_thread(engine.get_supported_languages)
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=f"failed to load languages: {ex}")
+    return {"model_id": model_id, "languages": languages}

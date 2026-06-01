@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ModelInfo(BaseModel):
     hf_repo: str
     enabled: bool = True
+    model_type: str = "customvoice"
 
 
 class Settings(BaseSettings):
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     max_concurrent_jobs: int = 1
     request_body_max_chars: int = 10000
     use_fake_engine: bool = False
+    use_flash_attention2: bool = False
 
     @model_validator(mode='after')
     def validate_model_consistency(self) -> 'Settings':

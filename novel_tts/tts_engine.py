@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import shutil
 import numpy as np
 
 
@@ -41,7 +42,16 @@ class QwenTTSEngine(BaseTTSEngine):
         self._model = None
         self._model_sample_rate: int = sample_rate
 
+    def _ensure_system_dependencies(self) -> None:
+        if shutil.which("sox"):
+            return
+        raise RuntimeError(
+            "SoX is required by qwen-tts but was not found in PATH. "
+            "On Windows, run 'choco install sox.portable -y' and restart your shell/service."
+        )
+
     def load(self):
+        self._ensure_system_dependencies()
         import torch
         from qwen_tts import Qwen3TTSModel  # pip install qwen-tts
 

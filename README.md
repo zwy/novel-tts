@@ -54,7 +54,7 @@ pydantic-settings
 soundfile
 numpy
 torch          # GPU build from pytorch.org for CUDA support
-transformers   # Qwen3-TTS model loading
+qwen-tts       # Official Qwen3-TTS inference API
 ```
 
 ---
@@ -338,6 +338,37 @@ curl -s http://localhost:8008/v1/models \
 The job reached `succeeded` but the WAV file was removed from disk (e.g., manual cleanup, temp-drive full). The audio path is stored in the database; the file itself must exist at `NOVEL_TTS_OUTPUT_DIR/<job_id>.wav`. Re-running the job (new `request_id` with same text) will regenerate it.
 
 If the service returns `503 Service Unavailable` on `/v1/tts/jobs/{id}/audio`, the file exists in the DB but is missing on disk. Check disk space and the value of `NOVEL_TTS_OUTPUT_DIR`.
+
+### Windows error: `SoX could not be found`
+
+If logs include:
+
+```text
+'sox' 不是内部或外部命令
+SoX could not be found!
+```
+
+Install SoX and restart the terminal/service:
+
+```powershell
+choco install sox.portable -y
+```
+
+Then verify:
+
+```powershell
+sox --version
+```
+
+If `sox` still cannot be found, reopen PowerShell (or reboot) so updated `PATH` takes effect.
+
+### Startup warning: `flash-attn is not installed`
+
+This is a performance warning, not a functional error. Synthesis still works with the PyTorch fallback.
+
+### Startup log: `oneDNN custom operations are on`
+
+This TensorFlow info log is harmless for this service and can be ignored.
 
 ---
 

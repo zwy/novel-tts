@@ -19,21 +19,51 @@ class FakeTTSEngine(BaseTTSEngine):
 
 
 class QwenTTSEngine(BaseTTSEngine):
+    # Maps voice_profile names to Qwen3-TTS speaker identifiers.
+    # Add custom entries as needed; unknown profiles fall back to "Serena".
+    VOICE_PROFILE_MAP: dict[str, tuple[str, str]] = {
+        # (speaker, language)
+        "female_calm":    ("Serena",    "Chinese"),
+        "female_bright":  ("Vivian",    "Chinese"),
+        "male_mellow":    ("Uncle_Fu",  "Chinese"),
+        "male_beijing":   ("Dylan",     "Chinese"),
+        "male_sichuan":   ("Eric",      "Chinese"),
+        "male_english":   ("Ryan",      "English"),
+        "male_american":  ("Aiden",     "English"),
+        "female_japanese":("Ono_Anna",  "Japanese"),
+        "female_korean":  ("Sohee",     "Korean"),
+    }
+    DEFAULT_SPEAKER = ("Serena", "Chinese")
+
     def __init__(self, model_id: str, sample_rate: int = 24000):
         super().__init__(sample_rate=sample_rate)
         self.model_id = model_id
-        self._pipeline = None
+        self._model = None
+        self._model_sample_rate: int = sample_rate
 
     def load(self):
-        from transformers import pipeline
+        import torch
+        from qwen_tts import Qwen3TTSModel  # pip install qwen-tts
 
-        self._pipeline = pipeline("text-to-speech", model=self.model_id)
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        self._model = Qwen3TTSModel.from_pretrained(
+            self.model_id,
+            device_map=device,
+            dtype=dtype,
+        )
 
     def synthesize(self, text: str, voice_profile: str) -> np.ndarray:
-        if self._pipeline is None:
+        if self._model is None:
             self.load()
-        output = self._pipeline(text)
-        wav = output["audio"]
-        if wav.dtype != np.float32:
-            wav = wav.astype(np.float32)
+        speaker, language = self.VOICE_PROFILE_MAP.get(
+            voice_profile, self.DEFAULT_SPEAKER
+        )
+        wavs, sr = self._model.generate_custom_voice(
+            text=text,
+            language=language,
+            speaker=speaker,
+        )
+        self._model_sample_rate = sr
+        wav = np.array(wavs[0], dtype=np.float32)
         return wav

@@ -34,9 +34,11 @@ class WorkerService:
             tmp_paths = []
             for idx, text in enumerate(parts):
                 wav = self.tts_engine.synthesize(text, voice_profile=job.voice_profile)
+                # Use the engine's actual sample rate (Qwen3-TTS may differ from default)
+                actual_sr = getattr(self.tts_engine, "_model_sample_rate", self.sample_rate)
                 temp = self.temp_dir / f"{job_id}_{idx:04d}.wav"
                 temp.parent.mkdir(parents=True, exist_ok=True)
-                sf.write(temp, wav, self.sample_rate)
+                sf.write(temp, wav, actual_sr)
                 tmp_paths.append(temp)
                 self.repo.set_done(job_id, idx + 1)
 
@@ -44,7 +46,7 @@ class WorkerService:
                 f"{job.book_id}:{job.chapter_id}:{job.text_hash}".encode()
             ).hexdigest()
             out_path = self.out_dir / job.book_id / f"{job.chapter_id}_{chapter_hash[:10]}.wav"
-            merge_segments(tmp_paths, out_path, self.sample_rate)
+            merge_segments(tmp_paths, out_path, actual_sr)
             self.repo.mark_succeeded(job_id, str(out_path))
         except Exception as ex:
             self.repo.mark_failed(job_id, "INFER_FAIL", str(ex))

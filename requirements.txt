@@ -8,4 +8,4 @@ httpx
 soundfile
 numpy
 torch
-transformers
+qwen-tts

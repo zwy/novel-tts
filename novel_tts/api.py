@@ -1,4 +1,5 @@
 # novel_tts/api.py
+import asyncio
 import hashlib
 import json
 from pathlib import Path
@@ -29,6 +30,26 @@ _worker = WorkerService(
 )
 app.state.repo = _repo
 app.state.worker = _worker
+app.state.worker_task = None
+
+
+@app.on_event("startup")
+async def start_worker_loop() -> None:
+    # Start one background consumer per application process.
+    app.state.worker_task = asyncio.create_task(app.state.worker.run_forever())
+
+
+@app.on_event("shutdown")
+async def stop_worker_loop() -> None:
+    task = app.state.worker_task
+    if task is None:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    app.state.worker_task = None
 
 
 def check_api_key(x_api_key: str | None):

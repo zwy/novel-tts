@@ -61,11 +61,16 @@ class QwenTTSEngine(BaseTTSEngine):
 
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+        logger.info(
+            "QwenTTSEngine loading model_id=%s on device=%s dtype=%s cuda_available=%s",
+            self.model_id, device, dtype, torch.cuda.is_available(),
+        )
         self._model = Qwen3TTSModel.from_pretrained(
             self.model_id,
             device_map=device,
             dtype=dtype,
         )
+        logger.info("QwenTTSEngine model loaded successfully on %s", device)
 
     def synthesize(self, text: str, voice_profile: str) -> np.ndarray:
         if self._model is None:

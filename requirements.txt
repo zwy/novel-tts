@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pydantic-settings
+pytest
+httpx
+soundfile
+numpy
+torch
+transformers

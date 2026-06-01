@@ -48,3 +48,28 @@ def test_healthz():
     r = client.get("/healthz")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+def test_full_job_lifecycle_with_fake_engine(test_client):
+    payload = {
+        "request_id": "req-lifecycle-1",
+        "book_id": "book-b",
+        "chapter_id": "ch-002",
+        "text": "这是生命周期测试。" * 180,
+        "voice_profile": "narrator_default",
+    }
+    r = test_client.post("/v1/tts/jobs", json=payload, headers={"x-api-key": "dev-local-key"})
+    assert r.status_code == 200
+    job_id = r.json()["job_id"]
+    assert job_id != "stub-job"  # must be a real UUID
+
+    # Synchronously process one job from the queue
+    import asyncio
+    asyncio.run(test_client.app.state.worker.process_job(job_id))
+
+    s = test_client.get(f"/v1/tts/jobs/{job_id}", headers={"x-api-key": "dev-local-key"})
+    assert s.status_code == 200
+    assert s.json()["status"] == "succeeded"
+
+    d = test_client.get(f"/v1/tts/jobs/{job_id}/audio", headers={"x-api-key": "dev-local-key"})
+    assert d.status_code == 200

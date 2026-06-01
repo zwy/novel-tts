@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+import logging
 import shutil
 import numpy as np
+
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTTSEngine(ABC):
@@ -75,5 +79,13 @@ class QwenTTSEngine(BaseTTSEngine):
             speaker=speaker,
         )
         self._model_sample_rate = sr
+        logger.info(
+            "qwen_tts synthesized voice_profile=%s speaker=%s language=%s sample_rate=%s text_len=%s",
+            voice_profile,
+            speaker,
+            language,
+            sr,
+            len(text),
+        )
         wav = np.array(wavs[0], dtype=np.float32)
         return wav

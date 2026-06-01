@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     }
     max_concurrent_jobs: int = 1
     request_body_max_chars: int = 10000
+    use_fake_engine: bool = False
 
     @model_validator(mode='after')
     def validate_model_consistency(self) -> 'Settings':

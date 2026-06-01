@@ -9,7 +9,7 @@ from novel_tts.config import Settings
 from novel_tts.db import create_session_factory
 from novel_tts.repository import JobRepository
 from novel_tts.worker import WorkerService
-from novel_tts.tts_engine import FakeTTSEngine
+from novel_tts.tts_engine import FakeTTSEngine, QwenTTSEngine
 
 app = FastAPI(title="novel-tts")
 settings = Settings()
@@ -20,7 +20,11 @@ _session_factory = create_session_factory(
 )
 _db_session = _session_factory()
 _repo = JobRepository(_db_session)
-_tts_engine = FakeTTSEngine(sample_rate=24000)  # replaced by QwenTTSEngine in production
+if settings.use_fake_engine:
+    _tts_engine = FakeTTSEngine(sample_rate=24000)
+else:
+    _hf_repo = settings.model_registry[settings.default_model_id].hf_repo
+    _tts_engine = QwenTTSEngine(model_id=_hf_repo, sample_rate=24000)
 _worker = WorkerService(
     repo=_repo,
     tts_engine=_tts_engine,

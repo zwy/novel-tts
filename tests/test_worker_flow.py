@@ -17,3 +17,13 @@ def test_create_or_get_by_idempotency(session):
     job1 = repo.create_or_get(payload)
     job2 = repo.create_or_get(payload)
     assert job1.job_id == job2.job_id
+
+
+from novel_tts.tts_engine import FakeTTSEngine
+
+
+def test_fake_engine_returns_wav_array():
+    eng = FakeTTSEngine(sample_rate=24000)
+    wav = eng.synthesize("你好，世界", voice_profile="narrator_default")
+    assert wav.ndim == 1
+    assert len(wav) > 0

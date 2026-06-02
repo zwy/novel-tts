@@ -34,8 +34,7 @@
 :: 是否启用 Flash Attention 2（需先安装 flash-attn，默认 false）
 :: set NOVEL_TTS_USE_FLASH_ATTENTION2=false
 
-:: ---- Cloud Provider: Xiaomi MiMo TTS ----
+:: ---- Cloud Provider: Xiaomi mimo TTS ----
 :: 在 https://platform.xiaomimimo.com 申请 API key，配以下两项即可启用云端合成
 :: set NOVEL_TTS_MIMO_API_KEY=your-mimo-api-key
-:: set NOVEL_TTS_AVAILABLE_MODELS=["qwen3_tts_0_6b_customvoice","mimo_v2_5_tts"]
 :: set NOVEL_TTS_DEFAULT_MODEL_ID=mimo_v2_5_tts

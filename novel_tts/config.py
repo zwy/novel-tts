@@ -23,9 +23,12 @@ class Settings(BaseSettings):
     output_dir: str = "./data/audio"
     temp_dir: str = "./data/temp"
     default_model_id: str = "qwen3_tts_0_6b_customvoice"
+    #: Models the API will accept on `POST /v1/tts/jobs`. Defaults to everything
+    #: that is `enabled=True` in the registry; override via
+    #: `NOVEL_TTS_AVAILABLE_MODELS` to opt in/out without code changes.
     available_models: list[str] = [
         "qwen3_tts_0_6b_customvoice",
-        "qwen3_tts_1_7b_customvoice",
+        "mimo_v2_5_tts",
     ]
     model_registry: dict[str, ModelInfo] = {
         "qwen3_tts_0_6b_customvoice": ModelInfo(

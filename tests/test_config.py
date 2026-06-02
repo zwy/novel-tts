@@ -28,3 +28,32 @@ def test_validator_rejects_available_model_not_in_registry():
                 )
             },
         )
+
+
+def test_mimo_model_present_in_default_registry():
+    s = Settings()
+    info = s.model_registry["mimo_v2_5_tts"]
+    assert info.provider == "mimo"
+    # enabled=True by default: a configured MIMO_API_KEY is enough to use it.
+    # The api.py layer gracefully skips construction if the key is missing.
+    assert info.enabled is True
+    assert info.provider_config["api_base"] == "https://api.xiaomimimo.com/v1"
+    assert info.provider_config["model"] == "mimo-v2.5-tts"
+
+
+def test_validator_rejects_unknown_provider():
+    with pytest.raises(Exception):
+        Settings(
+            default_model_id="mimo_v2_5_tts",
+            available_models=["mimo_v2_5_tts"],
+            model_registry={
+                "mimo_v2_5_tts": ModelInfo(
+                    hf_repo="mimo-v2.5-tts", provider="bogus_provider"
+                ),
+            },
+        )
+
+
+def test_mimo_api_key_setting_default_empty():
+    s = Settings()
+    assert s.mimo_api_key == ""

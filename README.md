@@ -159,6 +159,7 @@ All settings are read from environment variables with the prefix `NOVEL_TTS_`. N
 | `NOVEL_TTS_TEMP_DIR` | `./data/temp` | Scratch directory for per-segment temporary audio files. |
 | `NOVEL_TTS_DEFAULT_MODEL_ID` | `qwen3_tts_0_6b_customvoice` | Model used when a request omits `model_id`. |
 | `NOVEL_TTS_MAX_CONCURRENT_JOBS` | `1` | Maximum jobs processed simultaneously. Keep at 1 to avoid VRAM contention. |
+| `NOVEL_TTS_MIMO_API_KEY` | `""` | API key for the Xiaomi MiMo cloud TTS provider. Empty disables MiMo. See [Cloud Provider: Xiaomi MiMo TTS](#12-cloud-provider-xiaomi-mimo-tts). |
 
 Example `.env` file (loaded automatically by `pydantic-settings` if present):
 
@@ -263,13 +264,25 @@ Response:
 
 ```json
 {
+  "default_model_id": "qwen3_tts_0_6b_customvoice",
   "models": [
-    {"id": "qwen3_tts_0_6b_customvoice", "hf_repo": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"}
+    {
+      "id": "qwen3_tts_0_6b_customvoice",
+      "provider": "qwen",
+      "enabled": true,
+      "model_type": "customvoice"
+    },
+    {
+      "id": "mimo_v2_5_tts",
+      "provider": "mimo",
+      "enabled": false,
+      "model_type": "customvoice"
+    }
   ]
 }
 ```
 
-Only models listed in `NOVEL_TTS_AVAILABLE_MODELS` *and* having `enabled: true` in the registry are returned.
+Only models listed in `NOVEL_TTS_AVAILABLE_MODELS` *and* having `enabled: true` in the registry are actually routed to their engine. Disabled models appear in the listing for transparency.
 
 ---
 
@@ -476,3 +489,116 @@ http://localhost:8008/healthz  →  {"status":"ok","model_loaded":true}
 ```
 
 NSSM can be configured to restart the service if this probe fails (use a scheduled task or a custom monitor script).
+
+---
+
+## 12. Cloud Provider: Xiaomi MiMo TTS
+
+In addition to the local Qwen3-TTS engines, the service ships with an integration for
+[MiMo TTS](https://platform.xiaomimimo.com/docs/zh-CN/usage-guide/speech-synthesis-v2.5)
+— a cloud HTTP TTS service currently offering free preset voices via an OpenAI
+Chat-Completions compatible endpoint. No GPU is required; each segment is a single
+HTTPS round-trip.
+
+### 12.1 When to use MiMo
+
+| | Qwen3-TTS (local) | MiMo (cloud) |
+|---|---|---|
+| Hardware | NVIDIA GPU recommended | Any machine with HTTPS |
+| Latency | Pure inference on your box | Network round-trip per segment |
+| Voices | 9 (Chinese/Japanese/Korean/English) | 8 preset (4 Chinese + 4 English) |
+| Cost | Free, your GPU | Free during promotion; check pricing later |
+| Voice customization | Style instruct (natural language) | Style hint + English speed/pitch/volume phrases |
+| Privacy | Audio never leaves the box | Audio sent to api.xiaomimimo.com |
+
+### 12.2 Enable MiMo
+
+1. Sign in at <https://platform.xiaomimimo.com> and obtain an API key.
+2. Set the key in your environment (or `config.bat`):
+   ```env
+   NOVEL_TTS_MIMO_API_KEY=your-mimo-api-key
+   ```
+3. Add `mimo_v2_5_tts` to the available models and (optionally) make it the default:
+   ```env
+   NOVEL_TTS_AVAILABLE_MODELS=["qwen3_tts_0_6b_customvoice","mimo_v2_5_tts"]
+   NOVEL_TTS_DEFAULT_MODEL_ID=mimo_v2_5_tts
+   ```
+4. Flip `mimo_v2_5_tts.enabled` to `true` in `novel_tts/config.py`'s `model_registry`
+   (or override the whole `NOVEL_TTS_MODEL_REGISTRY` JSON via env). It defaults to
+   `false` so a missing key never breaks startup.
+5. Restart the service. The cloud engine is constructed at startup (cheap, no
+   network call); the first HTTPS call happens at the first `synthesize`.
+
+### 12.3 MiMo voice IDs
+
+`voice_profile` is passed straight through to MiMo as the `audio.voice` field. The
+9 supported IDs are:
+
+| Voice ID | Language | Gender |
+|---|---|---|
+| `mimo_default` | platform default | — |
+| `冰糖` | Chinese | female |
+| `茉莉` | Chinese | female |
+| `苏打` | Chinese | male |
+| `白桦` | Chinese | male |
+| `Mia` | English | female |
+| `Chloe` | English | female |
+| `Milo` | English | male |
+| `Dean` | English | male |
+
+You can list them at runtime:
+
+```bash
+curl -s http://localhost:8008/v1/models/mimo_v2_5_tts/speakers \
+  -H "X-Api-Key: dev-local-key"
+# → {"model_id":"mimo_v2_5_tts","speakers":["mimo_default","冰糖", ...]}
+```
+
+### 12.4 Submit a MiMo job
+
+```bash
+curl -s -X POST http://localhost:8008/v1/tts/jobs \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: dev-local-key" \
+  -d '{
+    "request_id": "req-mimo-001",
+    "book_id": "book-42",
+    "chapter_id": "chapter-03",
+    "text": "第三章\n\n林默站在山巅，望着远处连绵的群山，心中涌起一股难以言说的感慨。",
+    "voice_profile": "冰糖",
+    "model_id": "mimo_v2_5_tts",
+    "instruct": "用温柔的语气朗读"
+  }'
+```
+
+Poll and download follow the same `GET /v1/tts/jobs/{id}` and
+`GET /v1/tts/jobs/{id}/audio` flow as local engines.
+
+### 12.5 `speed` / `pitch` / `volume` mapping
+
+When you submit numeric `speed` / `pitch` / `volume` to a MiMo job, the service
+translates them into a short English natural-language hint in the `user` message,
+because MiMo accepts free-form style hints (no numeric control). Defaults
+(`1.0`) are omitted from the hint.
+
+| `speed` | Hint fragment |
+|---|---|
+| `> 1.0` | "speak a bit faster" |
+| `< 1.0` | "speak a bit slower" |
+
+(`pitch` and `volume` follow the same pattern, raising/softening the voice.)
+
+If you supply an explicit `instruct` field it overrides the auto-generated one.
+
+### 12.6 Architecture notes
+
+- MiMo runs over HTTP, so a chapter with ~10 segments is ~10 sequential POSTs.
+  Set `NOVEL_TTS_MAX_CONCURRENT_JOBS=1` to keep ordering; multiple concurrent
+  jobs would multiply the rate.
+- Each MiMo response is a 24 kHz mono float32 WAV (decoded server-side via
+  `soundfile`); the worker writes it to the segment cache with the correct
+  sample rate so the final `merge_segments` step is identical to the local
+  path.
+- Failures (401, 4xx, 5xx, malformed audio) are surfaced as
+  `error_code: "INFER_FAIL"` on the job with the upstream status code and body
+  prefix in the message.

@@ -9,37 +9,54 @@ from novel_tts.config import Settings
 from novel_tts.db import create_session_factory
 from novel_tts.repository import JobRepository
 from novel_tts.worker import WorkerService
-from novel_tts.tts_engine import FakeTTSEngine, QwenTTSEngine
+from novel_tts.tts_engine import build_engine
 from novel_tts.schemas import CreateJobRequest
 
 app = FastAPI(title="novel-tts")
 settings = Settings()
 
-# Module-level singletons — replaced via app.state in tests
+# Module-level singletons — replaced via app.state in tests.
 _session_factory = create_session_factory(
     settings.db_url, connect_args={"check_same_thread": False}
 )
 _db_session = _session_factory()
 _repo = JobRepository(_db_session)
-if settings.use_fake_engine:
-    _tts_engine = FakeTTSEngine(sample_rate=24000)
-else:
-    _hf_repo = settings.model_registry[settings.default_model_id].hf_repo
-    _tts_engine = QwenTTSEngine(
-        model_id=_hf_repo,
-        sample_rate=24000,
-        use_flash_attention2=settings.use_flash_attention2,
-    )
+
+# Build an engine per registered model. We only skip `enabled=False` entries.
+# For enabled entries whose provider can't be constructed right now (e.g. MiMo
+# without an API key, or Qwen without a GPU), we log a warning and leave that
+# model un-initialised — the `/v1/models/{id}/...` endpoints will return 503
+# and `POST /v1/tts/jobs` will reject the model with 503 as well, so the
+# failure is surfaced cleanly without breaking startup of the rest of the
+# service.
+_tts_engines: dict[str, object] = {}
+for _model_id, _info in settings.model_registry.items():
+    if not _info.enabled:
+        continue
+    try:
+        _tts_engines[_model_id] = build_engine(
+            _model_id,
+            _info,
+            fake=settings.use_fake_engine,
+            use_flash_attention2=settings.use_flash_attention2,
+            mimo_api_key=settings.mimo_api_key,
+        )
+    except Exception as ex:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Skipping TTS engine for model '%s' (provider=%s): %s",
+            _model_id, _info.provider, ex,
+        )
 _worker = WorkerService(
     repo=_repo,
-    tts_engine=_tts_engine,
+    tts_engines=_tts_engines,
     temp_dir=Path(settings.temp_dir),
     out_dir=Path(settings.output_dir),
     sample_rate=24000,
 )
 app.state.repo = _repo
 app.state.worker = _worker
-app.state.tts_engine = _tts_engine
+app.state.tts_engines = _tts_engines
 app.state.worker_task = None
 
 
@@ -77,6 +94,14 @@ async def create_job(request: Request, body: CreateJobRequest, x_api_key: str | 
     model_id = body.model_id or settings.default_model_id
     if model_id not in settings.available_models:
         raise HTTPException(status_code=400, detail="unknown model_id")
+    info = settings.model_registry.get(model_id)
+    if info is None or not info.enabled:
+        raise HTTPException(status_code=400, detail=f"model_id '{model_id}' is not enabled")
+    if model_id not in request.app.state.tts_engines:
+        raise HTTPException(
+            status_code=503,
+            detail=f"model_id '{model_id}' is registered but its engine failed to initialise",
+        )
     text_hash = hashlib.sha256(
         f"{body.text}|{body.voice_profile}|{model_id}".encode()
     ).hexdigest()
@@ -142,7 +167,18 @@ async def healthz():
 @app.get("/v1/models")
 async def list_models(x_api_key: str | None = Header(default=None)):
     check_api_key(x_api_key)
-    return {"default_model_id": settings.default_model_id, "models": settings.available_models}
+    models = []
+    for mid in settings.available_models:
+        info = settings.model_registry.get(mid)
+        if info is None:
+            continue
+        models.append({
+            "id": mid,
+            "provider": info.provider,
+            "enabled": info.enabled,
+            "model_type": info.model_type,
+        })
+    return {"default_model_id": settings.default_model_id, "models": models}
 
 
 @app.get("/v1/models/{model_id}/speakers")
@@ -150,7 +186,10 @@ async def get_model_speakers(request: Request, model_id: str, x_api_key: str | N
     check_api_key(x_api_key)
     if model_id not in settings.model_registry:
         raise HTTPException(status_code=400, detail="unknown model_id")
-    engine = request.app.state.tts_engine
+    engines = request.app.state.tts_engines
+    if model_id not in engines:
+        raise HTTPException(status_code=503, detail=f"engine for '{model_id}' not initialised")
+    engine = engines[model_id]
     try:
         speakers = await asyncio.to_thread(engine.get_supported_speakers)
     except Exception as ex:
@@ -163,7 +202,10 @@ async def get_model_languages(request: Request, model_id: str, x_api_key: str | 
     check_api_key(x_api_key)
     if model_id not in settings.model_registry:
         raise HTTPException(status_code=400, detail="unknown model_id")
-    engine = request.app.state.tts_engine
+    engines = request.app.state.tts_engines
+    if model_id not in engines:
+        raise HTTPException(status_code=503, detail=f"engine for '{model_id}' not initialised")
+    engine = engines[model_id]
     try:
         languages = await asyncio.to_thread(engine.get_supported_languages)
     except Exception as ex:

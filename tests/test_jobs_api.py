@@ -10,6 +10,7 @@ def test_create_job_and_poll_status():
         "chapter_id": "ch-001",
         "text": "这是一个测试章节。" * 200,
         "voice_profile": "narrator_default",
+        "model_id": "qwen3_tts_0_6b_customvoice",
     }
     r = client.post("/v1/tts/jobs", json=payload, headers={"x-api-key": "dev-local-key"})
     assert r.status_code == 200
@@ -134,7 +135,10 @@ def test_model_speakers_with_fake_engine(test_client, monkeypatch):
     def mock_get_speakers():
         return ["Serena", "Ryan"]
 
-    monkeypatch.setattr(test_client.app.state.tts_engine, "get_supported_speakers", mock_get_speakers)
+    monkeypatch.setattr(
+        test_client.app.state.tts_engines["qwen3_tts_0_6b_customvoice"],
+        "get_supported_speakers", mock_get_speakers
+    )
     r = test_client.get("/v1/models/qwen3_tts_0_6b_customvoice/speakers", headers={"x-api-key": "dev-local-key"})
     assert r.status_code == 200
     assert r.json()["speakers"] == ["Serena", "Ryan"]
@@ -144,7 +148,10 @@ def test_model_languages_with_fake_engine(test_client, monkeypatch):
     def mock_get_languages():
         return ["Chinese", "English"]
 
-    monkeypatch.setattr(test_client.app.state.tts_engine, "get_supported_languages", mock_get_languages)
+    monkeypatch.setattr(
+        test_client.app.state.tts_engines["qwen3_tts_0_6b_customvoice"],
+        "get_supported_languages", mock_get_languages
+    )
     r = test_client.get("/v1/models/qwen3_tts_0_6b_customvoice/languages", headers={"x-api-key": "dev-local-key"})
     assert r.status_code == 200
     assert r.json()["languages"] == ["Chinese", "English"]

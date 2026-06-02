@@ -39,9 +39,14 @@ class WorkerTestCtx:
         self.repo = repo
         self.payload = payload
         engine = FakeTTSEngine(sample_rate=24000)
+        tts_engines = {
+            "qwen3_tts_0_6b_customvoice": engine,
+            "qwen3_tts_1_7b_customvoice": engine,
+            "mimo_v2_5_tts": engine,
+        }
         self.worker = WorkerService(
             repo=repo,
-            tts_engine=engine,
+            tts_engines=tts_engines,
             temp_dir=tmp_path / "temp",
             out_dir=tmp_path / "audio",
             sample_rate=24000,

@@ -37,10 +37,18 @@ def test_client(tmp_path):
     test_session = Session()
 
     repo = JobRepository(test_session)
-    tts_engine = FakeTTSEngine(sample_rate=24000)
+    # The fake engine is shared by every model_id the worker might dispatch to,
+    # which keeps the fixture trivial — tests that need per-model behaviour
+    # override the relevant entry in `app.state.tts_engines` directly.
+    fake_engine = FakeTTSEngine(sample_rate=24000)
+    tts_engines = {
+        "qwen3_tts_0_6b_customvoice": fake_engine,
+        "qwen3_tts_1_7b_customvoice": fake_engine,
+        "mimo_v2_5_tts": fake_engine,
+    }
     worker = WorkerService(
         repo=repo,
-        tts_engine=tts_engine,
+        tts_engines=tts_engines,
         temp_dir=tmp_path / "temp",
         out_dir=tmp_path / "audio",
         sample_rate=24000,
@@ -48,7 +56,7 @@ def test_client(tmp_path):
 
     api_module.app.state.repo = repo
     api_module.app.state.worker = worker
-    api_module.app.state.tts_engine = tts_engine
+    api_module.app.state.tts_engines = tts_engines
 
     client = TestClient(api_module.app)
     yield client

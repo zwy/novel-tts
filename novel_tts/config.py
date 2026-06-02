@@ -6,6 +6,10 @@ class ModelInfo(BaseModel):
     hf_repo: str
     enabled: bool = True
     model_type: str = "customvoice"
+    #: "qwen" for local Qwen3-TTS, "mimo" for Xiaomi MiMo HTTP TTS.
+    provider: str = "qwen"
+    #: Provider-specific configuration (api_base, model name overrides, etc.).
+    provider_config: dict = {}
 
 
 class Settings(BaseSettings):
@@ -31,11 +35,25 @@ class Settings(BaseSettings):
             hf_repo="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
             enabled=False,
         ),
+        # Cloud provider: Xiaomi MiMo TTS v2.5 (preset voices only).
+        # enabled=True by default so a configured MIMO_API_KEY is enough to route jobs
+        # to the cloud engine; flip to False (or override via env) to opt out.
+        "mimo_v2_5_tts": ModelInfo(
+            hf_repo="mimo-v2.5-tts",
+            enabled=True,
+            provider="mimo",
+            provider_config={
+                "api_base": "https://api.xiaomimimo.com/v1",
+                "model": "mimo-v2.5-tts",
+            },
+        ),
     }
     max_concurrent_jobs: int = 1
     request_body_max_chars: int = 10000
     use_fake_engine: bool = False
     use_flash_attention2: bool = False
+    #: API key for the Xiaomi MiMo cloud TTS provider. Empty string disables MiMo.
+    mimo_api_key: str = ""
 
     @model_validator(mode='after')
     def validate_model_consistency(self) -> 'Settings':
@@ -45,4 +63,7 @@ class Settings(BaseSettings):
             raise ValueError(f"available_models contains IDs not in model_registry: {unknown}")
         if self.default_model_id not in registry_keys:
             raise ValueError(f"default_model_id '{self.default_model_id}' not in model_registry")
+        for mid, info in self.model_registry.items():
+            if info.provider not in {"qwen", "mimo"}:
+                raise ValueError(f"model '{mid}' has unknown provider '{info.provider}'")
         return self

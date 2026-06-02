@@ -10,12 +10,31 @@ logger = logging.getLogger(__name__)
 
 
 class BaseTTSEngine(ABC):
+    #: True for engines that load model weights into local memory (e.g. Qwen3-TTS);
+    #: False for cloud HTTP providers (e.g. MiMo) that can be constructed lazily.
+    is_local: bool = True
+
     def __init__(self, sample_rate: int = 24000):
         self.sample_rate = sample_rate
 
     @abstractmethod
     def synthesize(self, text: str, voice_profile: str, instruct: str | None = None) -> np.ndarray:
         raise NotImplementedError
+
+    def get_supported_speakers(self) -> list[str]:
+        return []
+
+    def get_supported_languages(self) -> list[str]:
+        return []
+
+    @staticmethod
+    def _build_instruct(
+        speed: float | None = None,
+        pitch: float | None = None,
+        volume: float | None = None,
+    ) -> str | None:
+        """Default no-op instruct builder; engines with natural-language style control override this."""
+        return None
 
 
 class FakeTTSEngine(BaseTTSEngine):
@@ -155,3 +174,42 @@ class QwenTTSEngine(BaseTTSEngine):
         if self._model is None:
             self.load()
         return self._model.get_supported_languages()
+
+
+def build_engine(
+    model_id: str,
+    info: "ModelInfo",
+    *,
+    fake: bool = False,
+    use_flash_attention2: bool = False,
+    mimo_api_key: str = "",
+) -> BaseTTSEngine:
+    """Factory that constructs the right TTS engine for a given model_id.
+
+    Imports of cloud/HTTP providers are deferred to keep `import novel_tts` cheap
+    and to avoid pulling optional dependencies when only local engines are used.
+    """
+    if fake:
+        return FakeTTSEngine(sample_rate=24000)
+    provider = getattr(info, "provider", "qwen")
+    if provider == "qwen":
+        return QwenTTSEngine(
+            model_id=info.hf_repo,
+            sample_rate=24000,
+            use_flash_attention2=use_flash_attention2,
+        )
+    if provider == "mimo":
+        from novel_tts.mimo_engine import MiMoTTSEngine
+
+        if not mimo_api_key:
+            raise RuntimeError(
+                f"Model '{model_id}' (provider=mimo) requires NOVEL_TTS_MIMO_API_KEY env var."
+            )
+        cfg = info.provider_config or {}
+        return MiMoTTSEngine(
+            api_key=mimo_api_key,
+            api_base=cfg.get("api_base", "https://api.xiaomimimo.com/v1"),
+            model=cfg.get("model", info.hf_repo),
+            sample_rate=24000,
+        )
+    raise ValueError(f"Unknown provider '{provider}' for model '{model_id}'")

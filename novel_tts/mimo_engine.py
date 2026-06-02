@@ -1,6 +1,6 @@
-"""Cloud TTS provider backed by Xiaomi MiMo TTS (https://platform.xiaomimimo.com).
+"""Cloud TTS provider backed by Xiaomi mimo TTS (https://platform.xiaomimimo.com).
 
-MiMo exposes an OpenAI-Chat-Completions compatible endpoint at
+mimo exposes an OpenAI-Chat-Completions compatible endpoint at
 ``https://api.xiaomimimo.com/v1/chat/completions``. We only use the *preset-voice*
 model ``mimo-v2.5-tts`` here; the audio bytes come back base64-encoded inside
 ``choices[0].message.audio.data``.
@@ -28,7 +28,7 @@ class MiMoTTSEngine(BaseTTSEngine):
     is_local = False
 
     # 8 preset voices (4 Chinese, 4 English) plus the platform default.
-    # Voice IDs are passed straight through to the MiMo API as `audio.voice`.
+    # Voice IDs are passed straight through to the mimo API as `audio.voice`.
     SUPPORTED_VOICES: list[str] = [
         "mimo_default",
         "冰糖", "茉莉", "苏打", "白桦",
@@ -51,7 +51,7 @@ class MiMoTTSEngine(BaseTTSEngine):
     def synthesize(self, text: str, voice_profile: str, instruct: str | None = None) -> np.ndarray:
         if not voice_profile:
             raise ValueError("MiMoTTSEngine.synthesize requires a non-empty voice_profile "
-                             "(used as the MiMo voice id, e.g. 'Chloe' or '冰糖').")
+                             "(used as the mimo voice id, e.g. 'Chloe' or '冰糖').")
         url = f"{self.api_base}/chat/completions"
         payload = {
             "model": self.model,
@@ -129,9 +129,9 @@ class MiMoTTSEngine(BaseTTSEngine):
         pitch: float | None = None,
         volume: float | None = None,
     ) -> str | None:
-        """Convert numeric TTS params to short English natural-language phrases for MiMo.
+        """Convert numeric TTS params to short English natural-language phrases for mimo.
 
-        MiMo accepts free-form style hints in the ``user`` message, so we just
+        mimo accepts free-form style hints in the ``user`` message, so we just
         build a short comma-separated sentence describing the deviations from
         defaults. Defaults (1.0) are omitted to keep the hint clean.
         """

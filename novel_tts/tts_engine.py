@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class BaseTTSEngine(ABC):
     #: True for engines that load model weights into local memory (e.g. Qwen3-TTS);
-    #: False for cloud HTTP providers (e.g. MiMo) that can be constructed lazily.
+    #: False for cloud HTTP providers (e.g. mimo) that can be constructed lazily.
     is_local: bool = True
 
     def __init__(self, sample_rate: int = 24000):
@@ -206,10 +206,13 @@ def build_engine(
                 f"Model '{model_id}' (provider=mimo) requires NOVEL_TTS_MIMO_API_KEY env var."
             )
         cfg = info.provider_config or {}
+        # Prefer the explicit provider_config["model"]; fall back to hf_repo
+        # for backwards-compat (legacy entries used hf_repo to hold the model id).
+        upstream_model = cfg.get("model") or info.hf_repo
         return MiMoTTSEngine(
             api_key=mimo_api_key,
             api_base=cfg.get("api_base", "https://api.xiaomimimo.com/v1"),
-            model=cfg.get("model", info.hf_repo),
+            model=upstream_model,
             sample_rate=24000,
         )
     raise ValueError(f"Unknown provider '{provider}' for model '{model_id}'")

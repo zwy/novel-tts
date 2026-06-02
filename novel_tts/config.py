@@ -6,9 +6,10 @@ class ModelInfo(BaseModel):
     hf_repo: str
     enabled: bool = True
     model_type: str = "customvoice"
-    #: "qwen" for local Qwen3-TTS, "mimo" for Xiaomi MiMo HTTP TTS.
+    #: "qwen" for local Qwen3-TTS, "mimo" for Xiaomi mimo HTTP TTS.
     provider: str = "qwen"
-    #: Provider-specific configuration (api_base, model name overrides, etc.).
+    #: Provider-specific configuration. For non-HF providers (e.g. mimo) this
+    #: carries the upstream model id and endpoint instead of a HF repo name.
     provider_config: dict = {}
 
 
@@ -35,11 +36,13 @@ class Settings(BaseSettings):
             hf_repo="Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
             enabled=False,
         ),
-        # Cloud provider: Xiaomi MiMo TTS v2.5 (preset voices only).
+        # Cloud provider: Xiaomi mimo TTS v2.5 (preset voices only).
         # enabled=True by default so a configured MIMO_API_KEY is enough to route jobs
         # to the cloud engine; flip to False (or override via env) to opt out.
+        # `hf_repo` is left blank — mimo is not on HuggingFace — the actual
+        # upstream model id lives in `provider_config["model"]` below.
         "mimo_v2_5_tts": ModelInfo(
-            hf_repo="mimo-v2.5-tts",
+            hf_repo="",
             enabled=True,
             provider="mimo",
             provider_config={
@@ -52,7 +55,7 @@ class Settings(BaseSettings):
     request_body_max_chars: int = 10000
     use_fake_engine: bool = False
     use_flash_attention2: bool = False
-    #: API key for the Xiaomi MiMo cloud TTS provider. Empty string disables MiMo.
+    #: API key for the Xiaomi mimo cloud TTS provider. Empty string disables mimo.
     mimo_api_key: str = ""
 
     @model_validator(mode='after')

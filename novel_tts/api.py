@@ -23,7 +23,7 @@ _db_session = _session_factory()
 _repo = JobRepository(_db_session)
 
 # Build an engine per registered model. We only skip `enabled=False` entries.
-# For enabled entries whose provider can't be constructed right now (e.g. MiMo
+# For enabled entries whose provider can't be constructed right now (e.g. mimo
 # without an API key, or Qwen without a GPU), we log a warning and leave that
 # model un-initialised — the `/v1/models/{id}/...` endpoints will return 503
 # and `POST /v1/tts/jobs` will reject the model with 503 as well, so the
